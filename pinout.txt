@@ -1,13 +1,16 @@
+Board: Teensy 4.0
+Powered via USB
+
 GND	Screen GND (white) / encoder GND / button GND / pot 1 GND / pot 2 GND
-5V	
-3.3V	Screen 3.3V (purple) / pot 1 3.3V / pot 2 3.3V
+5V	-
+3.3V	Screen 3.3V (purple) / Screen BL (grey) / pot 1 3.3V / pot 2 3.3V
 0	MIDI UART
 1	Encoder A
 2	Encoder B
 3	(free: digital in/out, PWM)
 4	(free: digital in/out, PWM)
 5	(free: digital in/out, PWM)
-6	Screen BL (grey)
+6	(free: digital in/out, PWM)
 7	Audio DIN
 8	Audio DOUT
 9	Screen RST (brown)
