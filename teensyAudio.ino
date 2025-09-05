@@ -2,6 +2,8 @@
 #include <Audio.h>
 #include <Wire.h>
 #include <SPI.h>
+
+// Bounce v1 library
 #include <Bounce.h>
 
 // LCD driver
@@ -25,6 +27,7 @@ Bounce button6 = Bounce(6, 15);
 void setup() {
   // Onboard hardware
   Serial.begin(115200);
+  Serial.println("Starting up");
   pinMode(3, INPUT_PULLUP);
   pinMode(4, INPUT_PULLUP);
   pinMode(5, INPUT_PULLUP);
@@ -33,6 +36,10 @@ void setup() {
   button4.update();
   button5.update();
   button6.update();
+  Serial.printf("Button 3: %d\n", button3.read());
+  Serial.printf("Button 4: %d\n", button4.read());
+  Serial.printf("Button 5: %d\n", button5.read());
+  Serial.printf("Button 6: %d\n", button6.read());
 
   // Teensy Audio library
   AudioMemory(10);
@@ -53,15 +60,21 @@ void loop() {
   button4.update();
   button5.update();
   button6.update();
+
+  if( button3.fallingEdge() ) Serial.println("Button 3 pressed");
+  if( button4.fallingEdge() ) Serial.println("Button 4 pressed");
+  if( button5.fallingEdge() ) Serial.println("Button 5 pressed");
+  if( button6.fallingEdge() ) Serial.println("Button 6 pressed");
+
   float amplitude = 1;
   float frequency;
-  if (button3.read() == HIGH) {
+  if (button3.read() == LOW) {
     frequency = notes[60].frequency;
-  } else if (button4.read() == HIGH) {
+  } else if (button4.read() == LOW) {
     frequency = notes[62].frequency;
-  } else if (button5.read() == HIGH) {
+  } else if (button5.read() == LOW) {
     frequency = notes[64].frequency;
-  } else if (button6.read() == HIGH) {
+  } else if (button6.read() == LOW) {
     frequency = notes[67].frequency;
   } else {
     amplitude = 0;
