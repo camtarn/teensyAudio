@@ -56,35 +56,30 @@ void setup() {
 }
 
 void loop() {
+  scanIO();
+  playAudio();
+  drawScreen();
+}
+
+void scanIO() {
+}
+
+void playAudio() {
+}
+
+int getNoteNumber(int buttonNumber) {
+  for (int i = 0; i < KEY_BUTTON_COUNT; i++) {
+    if (BUTTON_MAPPINGS[i][0] == buttonNumber) {
+      return BUTTON_MAPPINGS[i][1];
+    }
+  }
+  return 0;
+}
+
+void drawScreen() {
   int timeMillis = millis();
 
-  button3.update();
-  button4.update();
-  button5.update();
-  button6.update();
-
-  if (button3.fallingEdge()) Serial.println("Button 3 pressed");
-  if (button4.fallingEdge()) Serial.println("Button 4 pressed");
-  if (button5.fallingEdge()) Serial.println("Button 5 pressed");
-  if (button6.fallingEdge()) Serial.println("Button 6 pressed");
-
-  float amplitude = 1;
-  float frequency;
-  if (button3.read() == LOW) {
-    frequency = notes[60].frequency;
-  } else if (button4.read() == LOW) {
-    frequency = notes[62].frequency;
-  } else if (button5.read() == LOW) {
-    frequency = notes[64].frequency;
-  } else if (button6.read() == LOW) {
-    frequency = notes[67].frequency;
-  } else {
-    amplitude = 0;
-    frequency = 0;
-  }
-  waveform1.amplitude(amplitude);
-  waveform1.frequency(frequency);
-
+  // Update screen once per second
   const char *smiley;
   if (timeMillis % 2000 < 1000) {
     smiley = smileyMouthClosed;
