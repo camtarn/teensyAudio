@@ -8,11 +8,11 @@
 
 // LCD driver
 #include "src/lcd/LCD_Driver.h"
-#include "src/lcd/DEV_Config.h"
 #include "src/lcd/GUI_Paint.h"
-#include "src/lcd/fonts.h"
 
+// Project files
 #include "src/notes.h"
+#include "src/images.h"
 
 AudioSynthWaveform waveform1;
 AudioOutputI2S i2s1;
@@ -51,20 +51,22 @@ void setup() {
   Config_Init();
   LCD_Init();
   LCD_SetBacklight(100);
+  Paint_NewImage(LCD_WIDTH, LCD_HEIGHT, 90, WHITE);
   Paint_Clear(BLACK);
-  Paint_DrawString_EN(10, 10, "Hello world!", &Font24, BLACK, WHITE);
 }
 
 void loop() {
+  int timeMillis = millis();
+
   button3.update();
   button4.update();
   button5.update();
   button6.update();
 
-  if( button3.fallingEdge() ) Serial.println("Button 3 pressed");
-  if( button4.fallingEdge() ) Serial.println("Button 4 pressed");
-  if( button5.fallingEdge() ) Serial.println("Button 5 pressed");
-  if( button6.fallingEdge() ) Serial.println("Button 6 pressed");
+  if (button3.fallingEdge()) Serial.println("Button 3 pressed");
+  if (button4.fallingEdge()) Serial.println("Button 4 pressed");
+  if (button5.fallingEdge()) Serial.println("Button 5 pressed");
+  if (button6.fallingEdge()) Serial.println("Button 6 pressed");
 
   float amplitude = 1;
   float frequency;
@@ -82,4 +84,24 @@ void loop() {
   }
   waveform1.amplitude(amplitude);
   waveform1.frequency(frequency);
+
+  const char *smiley;
+  if (timeMillis % 2000 < 1000) {
+    smiley = smileyMouthClosed;
+  } else {
+    smiley = smileyMouthOpen;
+  }
+  if (timeMillis % 1000 == 0) {
+    for (int x = 0; x < smileyWidth; x++) {
+      for (int y = 0; y < smileyHeight; y++) {
+        int colour;
+        if (smiley[x + (y * smileyWidth)]) {
+          colour = CYAN;
+        } else {
+          colour = BLACK;
+        }
+        Paint_DrawRectangle(x * 4 + 50, y * 4 + 50, (x + 1) * 4 + 50, (y + 1) * 4 + 50, colour, DOT_PIXEL_1X1, DRAW_FILL_FULL);
+      }
+    }
+  }
 }
