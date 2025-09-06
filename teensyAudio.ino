@@ -162,6 +162,44 @@ void scanIO() {
 }
 
 void playAudio() {
+  // Assign notes to polyphony voices
+  // If more keys are pressed than we have polyphony, drop oldest key presses
+  // first, using key pitch to break ties when multiple keys are pressed at
+  // once (highest notes win)
+  // FIXME: in order to work with MIDI, we should actually make this use note on/note off events.
+  // When we see a note on, we should check if we have any free voices. If not, we first check
+  // whether a voice for that note is already in its release phase, and if so, reuse that voice. 
+  // If we can't do that, we stop the voice which has the oldest beganAt time, or if all the notes
+  // have the same beganAt, we stop the lowest note. When we see a noteOff event, we set that note
+  // to release, and clear it from the active voices when its release phase is done.
+
+  // Determine which notes we want to play
+  struct activeNote proposedActiveNotes[KEY_BUTTON_COUNT];
+  for (int i = 0; i < KEY_BUTTON_COUNT; i++) {
+    // Both key buttons and notes use 0 to indicate no button/no note
+    proposedActiveNotes[i].keyButtonNumber = pressedKeyButtons[i];
+    proposedActiveNotes[i].noteNumber = getNoteNumber(pressedKeyButtons[i]);
+    proposedActiveNotes[i].releasing = 0;
+  }
+
+  // Figure out if we have enough voices to play those notes
+
+  // float amplitude = 1;
+  // float frequency;
+  // if (button3.read() == LOW) {
+  //   frequency = notes[60].frequency;
+  // } else if (button4.read() == LOW) {
+  //   frequency = notes[62].frequency;
+  // } else if (button5.read() == LOW) {
+  //   frequency = notes[64].frequency;
+  // } else if (button6.read() == LOW) {
+  //   frequency = notes[67].frequency;
+  // } else {
+  //   amplitude = 0;
+  //   frequency = 0;
+  // }
+  // waveform1.amplitude(amplitude);
+  // waveform1.frequency(frequency);
 }
 
 int getNoteNumber(int buttonNumber) {
