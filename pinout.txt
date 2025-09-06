@@ -1,16 +1,16 @@
 Board: Teensy 4.0
 Powered via USB
 
-GND	Screen GND (white) / encoder GND / button GND / pot 1 GND / pot 2 GND
+GND	Screen GND (white) / encoder GND / pot 1 GND / pot 2 GND
 5V	-
 3.3V	Screen 3.3V (purple) / Screen BL (grey - note, this works anyway if it's not connected) / pot 1 3.3V / pot 2 3.3V
 0	MIDI UART
 1	Encoder A
 2	Encoder B
-3	(free: digital in/out, PWM)
-4	(free: digital in/out, PWM)
-5	(free: digital in/out, PWM)
-6	(free: digital in/out, PWM)
+3	Button OK
+4	Button Back
+5	Button Up
+6	Button Down
 7	Audio DIN
 8	Audio DOUT
 9	Screen RST (brown)
@@ -29,4 +29,34 @@ GND	Screen GND (white) / encoder GND / button GND / pot 1 GND / pot 2 GND
 22	(free: analog in, digital in/out, PWM)
 23	Audio MCLK
 
-
+IO extender (MCP23017)
+GND	Button common GND
+Pin	Pin ID	Assignment
+1	8	Button G#
+2	9	Button A
+3	10	Button A#
+4	11	Button B
+5	12	Button C^
+6	13	Button Left
+7	14	Button Right
+8	15	-
+9	3.3V in
+10	GND
+11	Not Connected
+12	Teensy SCL
+13	Teensy SDA
+14	Not Connected
+15	Address pin (tie to 3.3V)
+16	Address pin (tie to 3.3V)
+17	Address pin (tie to 3.3V)
+18	Reset (tie to 3.3V)
+19	Interrupt output (unused)
+20	Interrupt output (unused)
+21	0	Button C
+22	1	Button C#
+23	2	Button D
+24	3	Button D#
+25	4	Button E
+26	5	Button F
+27	6	Button F#
+28	7	Button G
