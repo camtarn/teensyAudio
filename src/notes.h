@@ -1,11 +1,13 @@
 struct note {
-  int noteNumber;
+  unsigned int noteNumber;
   char noteName[4];
   char altNoteName[4];
   float frequency;
 };
 
-const struct note notes[] ={
+// The MIDI note numbers in this array must match the array index
+const int NOTE_COUNT = 129;
+const struct note NOTES[] ={
   {0, "", "", 8.18},
   {1, "", "", 8.66},
   {2, "", "", 9.18},

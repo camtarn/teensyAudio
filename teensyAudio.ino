@@ -1,5 +1,5 @@
 // Standard C libraries
-#include <string.h>
+#include <limits.h>
 
 // Arduino libraries
 #include <Wire.h>
@@ -38,10 +38,9 @@ BounceMcp buttonLeft = BounceMcp();
 BounceMcp buttonRight = BounceMcp();
 
 // Maps button number to MIDI note
-const int BUTTON_MAPPINGS[][2] = {
+const unsigned int KEY_BUTTON_MAPPINGS[][2] = {
   { 0, 60 }, { 1, 61 }, { 2, 62 }, { 3, 63 }, { 4, 64 }, { 5, 65 }, { 6, 66 }, { 7, 67 }, { 8, 68 }, { 9, 69 }, { 10, 70 }, { 11, 71 }, { 12, 72 }
 };
-const int POLYPHONY = 4;
 
 // Keyboard buttons
 const int KEY_BUTTON_COUNT = 13;
@@ -65,7 +64,6 @@ struct keyButton keyButtons[] = {
   { 12, BounceMcp() },
   { 13, BounceMcp() }
 };
-int pressedKeyButtons[KEY_BUTTON_COUNT];
 
 // Audio system objects
 AudioSynthWaveform waveform1;
@@ -90,13 +88,15 @@ AudioConnection patchCords[] = {
 };
 
 // Polyphony note assignment system
-struct activeNote {
-  int keyButtonNumber;
-  int noteNumber;
+const int POLYPHONY = 4;
+struct voice {
+  int active;
+  struct note note;
   unsigned long beganAt;
   int releasing;
+  unsigned long releasedAt;
 };
-struct activeNote activeNotes[POLYPHONY];
+struct voice voices[POLYPHONY];
 
 void setup() {
   // Onboard hardware
@@ -148,42 +148,178 @@ void loop() {
 
 void scanIO() {
   for (int i = 0; i < KEY_BUTTON_COUNT; i++) {
-    pressedKeyButtons[i] = 0;
-  }
-  int nextIdx = 0;
-  for (int i = 0; i < KEY_BUTTON_COUNT; i++) {
     keyButtons[i].bounce.update();
-    // keyButtons are connected to ground when pressed, with a pullup on the input
-    if (keyButtons[i].bounce.read() == LOW) {
-      pressedKeyButtons[nextIdx] = keyButtons[i].pin;
-      ++nextIdx;
+    if (keyButtons[i].bounce.fell() || keyButtons[i].bounce.rose()) {
+      struct note note = getNoteForKey(keyButtons[i].pin);
+      // keyButtons are connected to ground when pressed, with a pullup on the input
+      if (keyButtons[i].bounce.fell()) {
+        sendNoteOn(note);
+      } else {
+        sendNoteOff(note);
+      }
     }
   }
 }
 
-void playAudio() {
-  // Assign notes to polyphony voices
-  // If more keys are pressed than we have polyphony, drop oldest key presses
-  // first, using key pitch to break ties when multiple keys are pressed at
-  // once (highest notes win)
-  // FIXME: in order to work with MIDI, we should actually make this use note on/note off events.
-  // When we see a note on, we should check if we have any free voices. If not, we first check
-  // whether a voice for that note is already in its release phase, and if so, reuse that voice. 
-  // If we can't do that, we stop the voice which has the oldest beganAt time, or if all the notes
-  // have the same beganAt, we stop the lowest note. When we see a noteOff event, we set that note
-  // to release, and clear it from the active voices when its release phase is done.
-
-  // Determine which notes we want to play
-  struct activeNote proposedActiveNotes[KEY_BUTTON_COUNT];
+struct note getNoteForKey(unsigned int buttonNumber) {
+  if (buttonNumber >= KEY_BUTTON_COUNT) {
+    // Defend against misconfigurations
+    Serial.println("Requested a nonexistent button mapping - stopping");
+    while (1) {};
+  }
   for (int i = 0; i < KEY_BUTTON_COUNT; i++) {
-    // Both key buttons and notes use 0 to indicate no button/no note
-    proposedActiveNotes[i].keyButtonNumber = pressedKeyButtons[i];
-    proposedActiveNotes[i].noteNumber = getNoteNumber(pressedKeyButtons[i]);
-    proposedActiveNotes[i].releasing = 0;
+    if (KEY_BUTTON_MAPPINGS[i][0] == buttonNumber) {
+      unsigned int noteNumber = KEY_BUTTON_MAPPINGS[i][1];
+      if (noteNumber > NOTE_COUNT) {
+        // Defend against misconfigurations
+        Serial.println("Requested a nonexistent note mapping - stopping");
+        while (1) {};
+      }
+      return NOTES[noteNumber];
+    }
+  }
+  // Defend against misconfigurations
+  Serial.println("Didn't find a mapping for this button - stopping");
+  while (1) {};
+}
+
+// Assign notes to polyphony voices
+void sendNoteOn(struct note note) {
+  // We don't allow multiple voices to play the same note.
+  // If there is already a voice with this note active, retrigger it by altering its onset time
+  for (int i = 0; i < POLYPHONY; i++) {
+    if (voices[i].note.noteNumber == note.noteNumber) {
+      voices[i].beganAt = millis();
+      return;
+    }
   }
 
-  // Figure out if we have enough voices to play those notes
+  // This is a new note.
+  // Try finding an inactive voice first
+  for (int i = 0; i < POLYPHONY; i++) {
+    if (!voices[i].active) {
+      voices[i] = activateVoice(note);
+      return;
+    }
+  }
 
+  // If more keys are pressed than we have polyphony:
+  // - Find notes which are already releasing:
+  // -- Drop the note which has been releasing for the longest time
+  // -- If there are multiple oldest notes with the same release time, use key pitch to break the tie
+  // - If no notes are releasing:
+  // -- Drop the note which started first
+  // -- If multiple oldest notes have the same onset time, use key pitch to break the tie
+  // First, find releasing voices
+  struct voice *releasingVoices[POLYPHONY];
+  int releasingVoiceCount = 0;
+  for (int i = 0; i < POLYPHONY; i++) {
+    if (voices[i].releasing) {
+      releasingVoices[releasingVoiceCount] = &voices[i];
+      ++releasingVoiceCount;
+    }
+  }
+  if (releasingVoiceCount > 0) {
+    // If we find some releasing voices, find the oldest release time
+    unsigned long oldestReleaseTime = ULONG_MAX;
+    for (int i = 0; i < releasingVoiceCount; i++) {
+      if (releasingVoices[i]->releasedAt < oldestReleaseTime) {
+        oldestReleaseTime = releasingVoices[i]->releasedAt;
+      }
+    }
+    // Then find any voices which released at that time
+    struct voice *oldestReleasingVoices[POLYPHONY];
+    int oldestReleasingVoiceCount = 0;
+    for (int i = 0; i < releasingVoiceCount; i++) {
+      if (releasingVoices[i]->releasedAt == oldestReleaseTime) {
+        oldestReleasingVoices[oldestReleasingVoiceCount] = releasingVoices[i];
+        ++oldestReleasingVoiceCount;
+      }
+    }
+    // If there's only one voice releasing, reuse that voice
+    if (oldestReleasingVoiceCount == 1) {
+      *oldestReleasingVoices[0] = activateVoice(note);
+      return;
+    }
+
+    // Otherwise, find the voice with the lowest note number
+    unsigned int lowestNote = UINT_MAX;
+    struct voice *lowestOldestReleasingVoice;
+    for (int i = 0; i < oldestReleasingVoiceCount; i++) {
+      if (oldestReleasingVoices[i]->note.noteNumber < lowestNote) {
+        lowestNote = oldestReleasingVoices[i]->note.noteNumber;
+        lowestOldestReleasingVoice = oldestReleasingVoices[i];
+      }
+    }
+    *lowestOldestReleasingVoice = activateVoice(note);
+    return;
+  }
+
+  // We don't have any voices in their release phase, so we're going to have to reuse an active voice
+  // First, find the oldest onset time
+  unsigned long oldestOnsetTime = ULONG_MAX;
+  for (int i = 0; i < POLYPHONY; i++) {
+    if (voices[i].beganAt < oldestOnsetTime) {
+      oldestOnsetTime = voices[i].beganAt;
+    }
+  }
+  // Then find any voices which started at that time
+  struct voice *oldestVoices[POLYPHONY];
+  int oldestVoiceCount = 0;
+  for (int i = 0; i < POLYPHONY; i++) {
+    if (voices[i].beganAt == oldestOnsetTime) {
+      oldestVoices[oldestVoiceCount] = &voices[i];
+      ++oldestVoiceCount;
+    }
+  }
+  // If there's only one oldest voice, reuse that voice
+  if (oldestVoiceCount == 1) {
+    *oldestVoices[0] = activateVoice(note);
+    return;
+  }
+
+  // Otherwise, find the voice with the lowest note number
+  unsigned int lowestOldestNote = UINT_MAX;
+  struct voice *lowestOldestVoice;
+  for (int i = 0; i < oldestVoiceCount; i++) {
+    if (oldestVoices[i]->note.noteNumber < lowestOldestNote) {
+      lowestOldestNote = oldestVoices[i]->note.noteNumber;
+      lowestOldestVoice = oldestVoices[i];
+    }
+  }
+  // And finally use that voice
+  *lowestOldestVoice = activateVoice(note);
+}
+
+struct voice activateVoice(struct note note) {
+  struct voice voice;
+  voice.active = 1;
+  voice.note = note;
+  voice.beganAt = millis();
+  voice.releasing = 0;
+  return voice;
+}
+
+// Note off puts the voice into its releasing phase, rather than deactivating it right away
+void sendNoteOff(struct note note) {
+  for (int i = 0; i < POLYPHONY; i++) {
+    if (voices[i].note.noteNumber == note.noteNumber) {
+      voices[i].releasing = 1;
+      voices[i].releasedAt = millis();
+      return;
+    }
+  }
+}
+
+// The 'all off' command immediately stops all notes playing
+void sendAllOff() {
+  for (int i = 0; i < POLYPHONY; i++) {
+    voices[i].active = 0;
+    voices[i].releasing = 0;
+  }
+}
+
+void playAudio() {
   // float amplitude = 1;
   // float frequency;
   // if (button3.read() == LOW) {
@@ -200,15 +336,6 @@ void playAudio() {
   // }
   // waveform1.amplitude(amplitude);
   // waveform1.frequency(frequency);
-}
-
-int getNoteNumber(int buttonNumber) {
-  for (int i = 0; i < KEY_BUTTON_COUNT; i++) {
-    if (BUTTON_MAPPINGS[i][0] == buttonNumber) {
-      return BUTTON_MAPPINGS[i][1];
-    }
-  }
-  return 0;
 }
 
 void drawScreen() {
