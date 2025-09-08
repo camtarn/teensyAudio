@@ -26,6 +26,9 @@
 #include "src/notes.h"
 #include "src/images.h"
 
+
+const int POLYPHONY = 4;
+
 // IO extender
 Adafruit_MCP23X17 mcp;
 
@@ -66,29 +69,47 @@ struct keyButton keyButtons[] = {
 };
 
 // Audio system objects
-AudioSynthWaveform waveform1;
-AudioSynthWaveform waveform2;
-AudioSynthWaveform waveform3;
-AudioSynthWaveform waveform4;
-AudioSynthWaveform *waveforms[] = { &waveform1, &waveform2, &waveform3, &waveform4 };
-AudioSynthWaveformSine lfo1;
+AudioSynthWaveform waveforms[POLYPHONY];
+AudioEffectEnvelope ampEnvelopes[POLYPHONY];
+AudioEffectEnvelope fltEnvelopes[POLYPHONY];
+AudioMixer4 fltModMixers[POLYPHONY];
+AudioFilterStateVariable filters[POLYPHONY];
 AudioMixer4 mixer;
-AudioFilterStateVariable filter1;
+AudioSynthWaveformSine lfo1;
+AudioEffectChorus fxChorus;
+AudioEffectDelay fxDelay;
+AudioEffectFreeverbStereo fxReverb;
 AudioOutputI2S i2s1;
 AudioControlSGTL5000 sgtl5000_1;
+
+#define VOICE(VOICE_NUM) \
+  { waveforms[VOICE_NUM], 0, filters[VOICE_NUM], 0 }, \
+  { filters[VOICE_NUM], 0, ampEnvelopes[VOICE_NUM], 0 }, \
+  { fltEnvelopes[VOICE_NUM], 0, fltModMixers[VOICE_NUM], 0 }, \
+  { lfo1, 0, fltModMixers[VOICE_NUM], 1 }, \
+  { fltModMixers[VOICE_NUM], 0, filters[VOICE_NUM], 1 }, \
+  { ampEnvelopes[VOICE_NUM], 0, mixer, VOICE_NUM }
+
 AudioConnection patchCords[] = {
-  { filter1, 0, i2s1, 0 },
-  { filter1, 0, i2s1, 1 },
-  { waveform1, 0, mixer, 0 },
-  { waveform2, 0, mixer, 1 },
-  { waveform3, 0, mixer, 2 },
-  { waveform4, 0, mixer, 3 },
-  { mixer, 0, filter1, 0 },
-  { lfo1, 0, filter1, 1 }
+  VOICE(0),
+  VOICE(1),
+  VOICE(2),
+  VOICE(3),
+  { mixer, 0, fxChorus, 0 },
+  { fxChorus, 0, fxDelay, 0 },
+  { fxDelay, 0, fxReverb, 0 },
+  { fxReverb, 0, i2s1, 0 },
+  { fxReverb, 1, i2s1, 1 }
 };
 
+// Chorus needs an explicit delay line buffer, unlike the other FX blocks
+// 16 blocks is about 46ms
+#define CHORUS_DELAY_LENGTH (16*AUDIO_BLOCK_SAMPLES)
+short fxChorusDl[CHORUS_DELAY_LENGTH];
+// Delay length in ms
+#define DELAY_LENGTH 500
+
 // Polyphony note assignment system
-const int POLYPHONY = 4;
 struct voice {
   int active;
   struct note note;
@@ -119,19 +140,24 @@ void setup() {
   }
 
   // Teensy Audio library
-  AudioMemory(20);
-  sgtl5000_1.enable();
-  sgtl5000_1.volume(0.3);
-  waveform1.begin(WAVEFORM_SAWTOOTH);
-  waveform2.begin(WAVEFORM_SAWTOOTH);
-  waveform3.begin(WAVEFORM_SAWTOOTH);
-  waveform4.begin(WAVEFORM_SAWTOOTH);
+  // Audio blocks are used by patch cords and delay (and maybe filter?)
+  // Reverb allocates its own memory, and chorus has an explicitly allocated buffer
+  AudioMemory(10 + POLYPHONY * 10 + (int) ceil(DELAY_LENGTH / 2.8 ));
+  for (int i = 0; i < POLYPHONY; i++) {
+    waveforms[i].begin(WAVEFORM_SAWTOOTH);
+  }
+  for (int i = 0; i < POLYPHONY; i++) {
+    filters[i].frequency(1000);
+    filters[i].resonance(1.5);
+    filters[i].octaveControl(1);
+  }
   lfo1.amplitude(1);
   lfo1.frequency(0.2);
-  filter1.frequency(1000);
-  filter1.resonance(1.5);
-  filter1.octaveControl(1);
-
+  fxChorus.begin(fxChorusDl, CHORUS_DELAY_LENGTH, 2);
+  fxDelay.delay(0, DELAY_LENGTH);
+  sgtl5000_1.enable();
+  sgtl5000_1.volume(0.3);
+  
   // LCD screen
   Config_Init();
   LCD_Init();
